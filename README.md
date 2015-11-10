@@ -1,6 +1,6 @@
 # streams
 
-PyCon 2015 talk on streamparse.
+PyData NYC 2015 talk on streamparse and pystorm.
 
 ## View the slides now
 

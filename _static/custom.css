@@ -1,5 +1,6 @@
 .slide h2 {
     position: static;
+    margin-top: 0px;
 }
 .slide p {
     margin-top: 40px;

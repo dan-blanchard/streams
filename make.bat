@@ -37,6 +37,7 @@ if "%1" == "help" (
 	echo.  pseudoxml  to make pseudoxml-XML files for display purposes
 	echo.  linkcheck  to check all external links for integrity
 	echo.  doctest    to run all doctests embedded in the documentation if enabled
+	echo.  coverage   to run coverage check of the documentation if enabled
 	goto end
 )
 
@@ -47,6 +48,14 @@ if "%1" == "clean" (
 )
 
 
+REM Check if sphinx-build is available and fallback to Python version if any
+%SPHINXBUILD% 2> nul
+if errorlevel 9009 goto sphinx_python
+goto sphinx_ok
+
+:sphinx_python
+
+set SPHINXBUILD=python -m sphinx.__init__
 %SPHINXBUILD% 2> nul
 if errorlevel 9009 (
 	echo.
@@ -59,6 +68,9 @@ if errorlevel 9009 (
 	echo.http://sphinx-doc.org/
 	exit /b 1
 )
+
+:sphinx_ok
+
 
 if "%1" == "html" (
 	%SPHINXBUILD% -b html %ALLSPHINXOPTS% %BUILDDIR%/html
@@ -115,9 +127,9 @@ if "%1" == "qthelp" (
 	echo.
 	echo.Build finished; now you can run "qcollectiongenerator" with the ^
 .qhcp project file in %BUILDDIR%/qthelp, like this:
-	echo.^> qcollectiongenerator %BUILDDIR%\qthelp\streams.qhcp
+	echo.^> qcollectiongenerator %BUILDDIR%\qthelp\streamparse.qhcp
 	echo.To view the help file:
-	echo.^> assistant -collectionFile %BUILDDIR%\qthelp\streams.ghc
+	echo.^> assistant -collectionFile %BUILDDIR%\qthelp\streamparse.ghc
 	goto end
 )
 
@@ -149,7 +161,7 @@ if "%1" == "latexpdf" (
 	%SPHINXBUILD% -b latex %ALLSPHINXOPTS% %BUILDDIR%/latex
 	cd %BUILDDIR%/latex
 	make all-pdf
-	cd %BUILDDIR%/..
+	cd %~dp0
 	echo.
 	echo.Build finished; the PDF files are in %BUILDDIR%/latex.
 	goto end
@@ -159,7 +171,7 @@ if "%1" == "latexpdfja" (
 	%SPHINXBUILD% -b latex %ALLSPHINXOPTS% %BUILDDIR%/latex
 	cd %BUILDDIR%/latex
 	make all-pdf-ja
-	cd %BUILDDIR%/..
+	cd %~dp0
 	echo.
 	echo.Build finished; the PDF files are in %BUILDDIR%/latex.
 	goto end
@@ -223,6 +235,15 @@ results in %BUILDDIR%/doctest/output.txt.
 	goto end
 )
 
+if "%1" == "coverage" (
+	%SPHINXBUILD% -b coverage %ALLSPHINXOPTS% %BUILDDIR%/coverage
+	if errorlevel 1 exit /b 1
+	echo.
+	echo.Testing of coverage in the sources finished, look at the ^
+results in %BUILDDIR%/coverage/python.txt.
+	goto end
+)
+
 if "%1" == "xml" (
 	%SPHINXBUILD% -b xml %ALLSPHINXOPTS% %BUILDDIR%/xml
 	if errorlevel 1 exit /b 1
@@ -239,4 +260,13 @@ if "%1" == "pseudoxml" (
 	goto end
 )
 
+if "%1" == "slides" (
+	%SPHINXBUILD% -b slides %ALLSPHINXOPTS% %BUILDDIR%/slides
+	if errorlevel 1 exit /b 1
+	echo.
+	echo.Build finished. The HTML slides pages are in %BUILDDIR%/slides.
+	goto end
+)
+
 :end
+

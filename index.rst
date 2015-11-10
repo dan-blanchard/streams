@@ -1,10 +1,11 @@
-===========
-streamparse
-===========
+=======================
+streamparse and pystorm
+=======================
 
 *Defeat the Python GIL with Apache Storm.*
 
-Andrew Montalenti, CTO
+Dan Blanchard |br|
+Backend Software Engineer @ Parse.ly
 
 .. rst-class:: logo
 
@@ -12,16 +13,9 @@ Andrew Montalenti, CTO
         :width: 40%
         :align: right
 
-About Me
-========
+.. |br| raw:: html
 
-- CTO/co-founder of Parse.ly
-- Hacking in Python for over a decade
-- Fully distributed team
-
-**@amontalenti** on Twitter:
-
-http://twitter.com/amontalenti
+    <br />
 
 Python GIL
 ==========
@@ -38,9 +32,9 @@ And on multi-core, it even leads to lock contention:
     :align: center
     :width: 80%
 
-`@dabeaz`_ discussed this in a Friday talk on concurrency.
+`@amontalenti`_ discussed this in more detail this afternoon
 
-.. _@dabeaz: http://twitter.com/dabeaz
+.. _@amontalenti: http://twitter.com/amontalenti
 
 Queues and workers
 ==================
@@ -71,11 +65,6 @@ It started to get messy
 .. image:: ./_static/monitors.jpg
     :width: 90%
     :align: center
-
-As Hettinger Says...
-====================
-
-"There must be a better way..."
 
 What is this Storm thing?
 =========================

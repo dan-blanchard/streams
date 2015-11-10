@@ -3,10 +3,12 @@
 #
 # simple static Flask fileserving app
 #
+from __future__ import print_function
+
 from flask import Flask
 
-app = Flask(__name__, 
-            static_folder="_build/slides", 
+app = Flask(__name__,
+            static_folder="_build/slides",
             static_url_path="")
 
 @app.route("/")
@@ -16,30 +18,24 @@ def root():
 #
 # livereload server
 #
-from livereload import Server, shell
-from formic import FileSet
-from os import getcwd, path
+from livereload import Server
 
 def make_livereload_server(wsgi_app):
     server = Server(wsgi_app)
 
     watch_patterns = (
         "index.rst",
-        "/_static/**"
+        "/_static/*"
     )
 
     build_cmd = "make slides"
 
-    print "Files being monitored:"
-
-    cwd = getcwd()
+    print("Files being monitored:")
 
     for pattern in watch_patterns:
-        print "Pattern: ", pattern
-        for filepath in FileSet(include=pattern):
-            print "=>", path.relpath(filepath, cwd)
-            server.watch(filepath, build_cmd)
-        print
+        print("Pattern: ", pattern)
+        server.watch(pattern, build_cmd)
+        print()
 
     return server
 
