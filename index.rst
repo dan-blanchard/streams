@@ -47,9 +47,9 @@ Queues and workers
 
 Standard way to solve GIL woes.
 
-**Queues**: ZeroMQ => Redis => RabbitMQ
+**Queues**: ZeroMQ, Redis, RabbitMQ
 
-**Workers**: Cron Jobs => RQ => Celery
+**Workers**: Cron Jobs, RQ, Celery
 
 Parse.ly Architecture, 2012
 ===========================
@@ -69,15 +69,15 @@ It started to get messy
 What is this Storm thing?
 =========================
 
-We read:
+.. rst-class:: build
 
-"Storm is a **distributed real-time computation system**."
+-  Storm is a **distributed real-time computation system**
 
-Dramatically simplifies your workers and queues.
+-  Dramatically simplifies your workers and queues.
 
-"Great," we thought. "But, what about Python support?"
+-  "Great, but what about Python support?"
 
-That's what streamparse is about.
+-  That's what streamparse and pystorm are about.
 
 ==================
 Our Storm Use Case
@@ -122,13 +122,15 @@ Too many datas!
 "Python Can't Do This"
 ======================
 
-"Free lunch is over."
+.. rst-class:: build
 
-"It can't scale."
+-  "Free lunch is over."
 
-"It's a toy language."
+-  "It can't scale."
 
-**"Shoulda used Scala."**
+-  "It's a toy language."
+
+-  **"Shoulda used Scala."**
 
 Python Can't Scale?
 ===================
@@ -151,13 +153,15 @@ streamparse is Pythonic Storm
 
 .. image:: ./_static/streamparse_logo.png
 
-streamparse lets you parse real-time streams of data.
+.. rst-class:: build
 
-It smoothly integrates Python code with Apache Storm.
+-  Lets you "parse" real-time streams of data.
 
-Easy quickstart, good CLI/tooling, production tested.
+-  Smoothly integrates Python code with Apache Storm.
 
-Good for: Analytics, Logs, Sensors, Low-Latency Stuff.
+-  Easy quickstart, good CLI/tooling, production tested.
+
+-  Good for: Analytics, Logs, Sensors, Low-Latency Stuff.
 
 Agenda
 ======
@@ -181,6 +185,8 @@ Storm Abstractions
 ==================
 
 Storm provides abstractions for data processing:
+
+.. rst-class:: build
 
 - Tuple
 - Spout
@@ -220,6 +226,7 @@ A component that emits raw data into cluster.
     from streamparse.spout import Spout
 
     class Words(Spout):
+        outputs = ['word']
 
         def initialize(self, conf, ctx):
             self.words = itertools.cycle(['dog', 'cat',
@@ -243,6 +250,7 @@ A component that performs an operation on tuples.
     from streamparse.bolt import Bolt
 
     class WordCount(Bolt):
+        outputs = ['word', 'count']
 
         def initialize(self, conf, ctx):
             self.counts = Counter()
@@ -252,7 +260,7 @@ A component that performs an operation on tuples.
             self.counts[word] += 1
             self.logger.info('%s: %d', word, self.counts[word])
 
-Keeps word counts in-memory (assumes grouping).
+Keeps word counts in-memory (assumes *grouping*).
 
 Topology
 ========
@@ -261,9 +269,28 @@ Directed Acyclic Graph (DAG) describing it all.
 
 .. sourcecode:: python
 
+    from streamparse.dsl import Grouping, Topology
+
     class WordCountTopology(Topology):
         word_spout = WordSpout.spec(par=2)
-        word_count_bolt = WordCountBolt.spec(inputs=[word_spout], par=8)
+        count_bolt = WordCountBolt.spec(inputs={word_spout:
+                                                Grouping.fields('word')},
+                                        par=8)
+
+
+Streams, Grouping, and Parallelism
+==================================
+
+================ ================= =======================
+X                ``word_spout``    ``count_bolt``
+================ ================= =======================
+input            ``None``          ``word_spout``
+output           ``count_bolt``    ``None``
+tuple            ``("dog",)``      ``("dog", 4)``
+stream           ``["word"]``      ``["word", "count"]``
+grouping         ``["word"]``      ``shuffle``
+parallelism      2                 8
+================ ================= =======================
 
 
 ===============
@@ -279,19 +306,6 @@ Tuple Tree
         :width: 70%
         :align: center
 
-Streams, Grouping and Parallelism
-=================================
-
-================ ================= =======================
-X                word-spout        word-count-bolt
-================ ================= =======================
-input            None              word-spout
-output           word-count-bolt   None
-tuple            ``("dog",)``      ``("dog", 4)``
-stream           ``["word"]``      ``["word", "count"]``
-grouping         ``["word"]``      ``":shuffle"``
-parallelism      2                 8
-================ ================= =======================
 
 Nimbus and Storm UI
 ===================
@@ -300,15 +314,6 @@ Nimbus and Storm UI
 
     .. image:: ./_static/storm_ui.png
         :width: 98%
-        :align: center
-
-Workers and Zookeeper
-=====================
-
-.. rst-class:: spaced
-
-    .. image:: ./_static/storm_cluster.png
-        :width: 80%
         :align: center
 
 Empty Slots
@@ -358,14 +363,16 @@ So, Storm is Sorta Amazing!
 
 Storm...
 
+.. rst-class:: build
+
 - will **guarantee processing** via tuple trees
-- does **tuneable parallelism** per component
+- allows **tuneable parallelism** per component
 - implements a **high availability** model
 - allocates **Python process slots** on physical nodes
 - helps us **rebalance computation** across cluster
 - handles **network messaging automatically**
+- AND, it **sidesteps the GIL**!
 
-And, it **beats the GIL**!
 
 Let's Do This!
 ==============
@@ -385,56 +392,63 @@ Multi-Lang Protocol (1)
 
 Storm supports Python through the **multi-lang protocol**.
 
+.. rst-class:: build
+
 - JSON protocol
 - Works via shell-based components
 - Communicate over ``STDIN`` and ``STDOUT``
-
-Clean, UNIX-y.
-
-Can use CPython, PyPy; no need for Jython or Py4J.
-
-Kinda quirky, but also relatively simple to implement.
+- Clean, UNIX-y.
+- Can just use CPython, PyPy; no need for Jython or Py4J.
+- Kinda quirky, but also relatively simple to implement.
 
 Multi-Lang Protocol (2)
 =======================
 
-Each component of a "Python" Storm topology is either:
+.. rst-class:: build
 
-- ``ShellSpout``
-- ``ShellBolt``
+- Each component of a "Python" Storm topology is either:
 
-Java implementations speak to Python via light JSON.
+    - ``ShellSpout``
+    - ``ShellBolt``
 
-There's **one sub-process per Storm task**.
+- Java implementations speak to Python via light JSON.
 
-If ``p = 8``, then **8 Python processes** are spawned.
+- There's **one sub-process per Storm task**.
 
-Multi-Lang Protocol (3)
-=======================
+- If ``par = 8``, then **8 Python processes** are spawned.
 
-Handshake sends config and context to Python process.
+- Handshake sends config and context to Python process.
 
-Heartbeats make sure subprocesses aren't stuck.
+- Heartbeats make sure subprocesses aren't stuck. (0.9.3+)
 
-storm.py issues
-===============
 
-Storm bundles "storm.py" (a multi-lang implementation).
+.. note::
+    Other serialization methods also supported.
 
-But, it's not Pythonic or reliable.
 
-We'll fix that, we thought!
+storm.py
+========
+
+.. rst-class:: build
+
+- Storm bundles "storm.py" (a basic multi-lang implementation).
+
+- **not pystorm**
+
+- But, it's not Pythonic or reliable.
+
+- We'll fix that, we thought!
 
 Storm as Infrastructure
 =======================
 
 Thought: Storm should be like Cassandra/Elasticsearch.
 
-"Written in Java, but Pythonic nonetheless."
+"Written in Java, but Pythonic API nonetheless."
 
 Need: Python as a **first-class citizen**.
 
-Must also fix packing unpleasantness..
+Must also fix packing unpleasantness.
 
 ====================
 streamparse overview
@@ -471,13 +485,15 @@ Why not just have one Python implementation of Multi-Lang?
 Enter pystorm
 =============
 
-Took streamparse's storm package, added Yelp's serialization code.
+.. image:: ./_static/pystorm_logo.png
 
-`No response from Yelp`_ yet, but we have high hopes.
+streamparse's storm subpackage + Pyleus's serialization code.
 
-Plan to request that Apache Storm just points to pystorm instead of storm.py.
+`No response from Pyleus devs`_ yet, but we have high hopes.
 
-.. _No response from Yelp: https://github.com/Yelp/pyleus/issues/158
+Would like to have it replace storm.py.
+
+.. _No response from Pyleus devs: https://github.com/Yelp/pyleus/issues/158
 
 streamparse CLI
 ===============
@@ -524,23 +540,13 @@ Submitting to remote cluster
 
 Does all the following **magic**:
 
+    .. rst-class:: build
+
     - Makes virtualenvs across cluster (optional)
     - Builds a JAR out of your source code
     - Opens reverse tunnel to Nimbus
     - Constructs an in-memory Topology spec
     - Uploads JAR to Nimbus
-
-streamparse supplants storm.py
-==============================
-
-.. image:: _static/streamparse_comp.png
-    :align: center
-    :width: 80%
-
-==========================
-Making our topology faster
-==========================
-
 
 BatchingBolt for Performance
 ============================
@@ -573,6 +579,12 @@ Bolts for Real-Time ETL
         :width: 80%
         :align: center
 
+streamparse supplants storm.py
+==============================
+
+.. image:: _static/streamparse_comp.png
+    :align: center
+    :width: 80%
 
 streamparse config.json
 =======================
@@ -599,8 +611,8 @@ streamparse config.json
         }
     }
 
-sparse options
-==============
+sparse commands
+===============
 
 .. sourcecode:: text
 
@@ -633,7 +645,7 @@ Coming soon
 Simpler Deployment
 ==================
 
-Currently we create virtualenvs via SSH/fabric.
+Currently we create virtualenvs via SSH and fabric.
 
 This doesn't work with Docker.
 
@@ -662,6 +674,15 @@ Will switch to communicating with Nimbus directly via Thrift.
 .. _thriftpy: https://github.com/eleme/thriftpy
 
 
+MessagePack Serialization
+=========================
+
+pystorm supports using ``msgpack`` to send messages to Storm.
+
+Hopefully Pyleus devs will `contribute their Java serialization code upstream`_.
+
+.. _contribute their Java serialization code upstream: https://github.com/Yelp/pyleus/issues/159
+
 Questions?
 ==========
 
@@ -672,8 +693,6 @@ pystorm: http://github.com/pystorm/pystorm
 Parse.ly's hiring: http://parse.ly/jobs
 
 Find me on Twitter: http://twitter.com/dsblanch
-
-That's it!
 
 
 .. raw:: html
