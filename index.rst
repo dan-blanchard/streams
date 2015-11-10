@@ -2,7 +2,7 @@
 streamparse and pystorm
 =======================
 
-*Defeat the Python GIL with Apache Storm.*
+*Simple, Reliable Parallel Processing with Storm*
 
 Dan Blanchard |br|
 Backend Software Engineer @ Parse.ly
@@ -99,7 +99,7 @@ Elegant data dashboards
 
 Informing thousands of editors and writers every day:
 
-.. image:: ./_static/glimpse.png
+.. image:: ./_static/glimpse_new.png
     :width: 98%
     :align: center
 
@@ -166,12 +166,12 @@ Agenda
 * Storm internals
 * How does Python work with Storm?
 * streamparse overview
-* pykafka preview
+* Coming soon
 
-Slides on Twitter; follow **@amontalenti**.
+Slides on web
 
-- Slides: http://parse.ly/slides/streamparse
-- Notes: http://parse.ly/slides/streamparse/notes
+- Slides: http://parse.ly/slides/pystorm2015
+- Notes: http://parse.ly/slides/pystorm2015/notes
 
 =======================
 Storm Topology Concepts
@@ -196,11 +196,6 @@ Wired Topology
         :width: 80%
         :align: center
 
-WARNING
-=======
-
-Using Python pseudocode and coroutines!
-
 Tuple
 =====
 
@@ -213,51 +208,51 @@ A single data record that flows through your cluster.
     # tuple spec: ["word", "count"]
     word_count = ("dog", 4)
 
-Spout
-=====
+Word Stream Spout in Python
+===========================
 
 A component that emits raw data into cluster.
 
 .. sourcecode:: python
 
-    class Spout(object):
-        def next_tuple():
-            """Called repeatedly to emit tuples."""
+    import itertools
 
-    @coroutine
-    def spout_coroutine(spout, target):
-        """Get tuple from spout and send it to target."""
-        while True:
-            tup = spout.next_tuple()
-            if tup is None:
-                time.sleep(10)
-                continue
-            if target is not None:
-                target.send(tup)
+    from streamparse.spout import Spout
 
-Bolt
-====
+    class Words(Spout):
 
-A component that implements one processing stage.
+        def initialize(self, conf, ctx):
+            self.words = itertools.cycle(['dog', 'cat',
+                                          'zebra', 'elephant'])
+
+        def next_tuple(self):
+            word = next(self.words)
+            self.emit([word])
+
+Emits one-word tuples from endless generator.
+
+Word Count Bolt in Python
+=========================
+
+A component that performs an operation on tuples.
 
 .. sourcecode:: python
 
-    class Bolt(object):
-        def process(tup):
-            """Called repeatedly to process tuples."""
+    from collections import Counter
 
-    @coroutine
-    def bolt_coroutine(bolt, target):
-        """Get tuple from input, process it in Bolt.
-           Then send it to next bolt target, if it exists."""
-        while True:
-            tup = (yield)
-            if tup is None:
-                time.sleep(10)
-                continue
-            to_emit = bolt.process(tup)
-            if target is not None:
-                target.send(to_emit)
+    from streamparse.bolt import Bolt
+
+    class WordCount(Bolt):
+
+        def initialize(self, conf, ctx):
+            self.counts = Counter()
+
+        def process(self, tup):
+            word = tup.values.word
+            self.counts[word] += 1
+            self.logger.info('%s: %d', word, self.counts[word])
+
+Keeps word counts in-memory (assumes grouping).
 
 Topology
 ========
@@ -266,15 +261,10 @@ Directed Acyclic Graph (DAG) describing it all.
 
 .. sourcecode:: python
 
-    # lay out topology
-    spout = WordSpout
-    bolts = [WordCountBolt, DebugPrintBolt]
+    class WordCountTopology(Topology):
+        word_spout = WordSpout.spec(par=2)
+        word_count_bolt = WordCountBolt.spec(inputs=[word_spout], par=8)
 
-    # wire topology
-    topology = wire(spout=spout, bolts=bolts)
-
-    # start the topology
-    next(topology)
 
 ===============
 Storm Internals
@@ -422,23 +412,16 @@ If ``p = 8``, then **8 Python processes** are spawned.
 Multi-Lang Protocol (3)
 =======================
 
-.. sourcecode:: text
+Handshake sends config and context to Python process.
 
-    INIT: JVM    => Python   >JSON
-    XFER: JVM    => JVM      >Kryo
-    DATA: JVM    => Python   >JSON
-    EMIT: Python => JVM      >JSON
-    XFER: JVM    => JVM      >Kryo
-     ACK: Python => JVM      >JSON
-    BEAT: JVM    => Python   >JSON
-    SYNC: Python => JVM      >JSON
+Heartbeats make sure subprocesses aren't stuck.
 
 storm.py issues
 ===============
 
 Storm bundles "storm.py" (a multi-lang implementation).
 
-But, it's not Pythonic.
+But, it's not Pythonic or reliable.
 
 We'll fix that, we thought!
 
@@ -451,7 +434,7 @@ Thought: Storm should be like Cassandra/Elasticsearch.
 
 Need: Python as a **first-class citizen**.
 
-Must also fix "Javanonic" bits (e.g. packaging).
+Must also fix packing unpleasantness..
 
 ====================
 streamparse overview
@@ -460,19 +443,41 @@ streamparse overview
 Enter streamparse
 =================
 
-Initial release Apr 2014; one year of active development.
+Initial release Apr 2014; over a year of active development.
 
-600+ stars `on Github`_, was a trending repo in May 2014.
+800+ stars `on Github`_, was a trending repo in May 2014.
 
-90+ mailing list members and 5 new committers.
+90+ mailing list members and 13 new `committers`_.
 
 3 Parse.ly engineers maintaining it.
 
-Funding `from DARPA`_. (Yes, really!)
+Funding `from DARPA`_.
 
-.. _"Real-Time Streams and Logs": https://www.youtube.com/watch?v=od8U-XijzlQ
+.. _committers: https://github.com/Parsely/streamparse/graphs/contributors
 .. _on Github: https://github.com/Parsely/streamparse
 .. _from DARPA: http://www.fastcompany.com/3040363/the-future-of-search-brought-to-you-by-the-pentagon
+
+Splitting off pystorm
+=====================
+
+After the release of streamparse, Yelp released `pyleus`_.
+
+Multi-Lang implementation essentially the same as streamparse's.
+
+Why not just have one Python implementation of Multi-Lang?
+
+.. _pyleus: https://github.com/Yelp/pyleus
+
+Enter pystorm
+=============
+
+Took streamparse's storm package, added Yelp's serialization code.
+
+`No response from Yelp`_ yet, but we have high hopes.
+
+Plan to request that Apache Storm just points to pystorm instead of storm.py.
+
+.. _No response from Yelp: https://github.com/Yelp/pyleus/issues/158
 
 streamparse CLI
 ===============
@@ -503,9 +508,12 @@ You can then run the local Storm topology using::
     storm.daemon.nimbus - Received topology submission with conf {...
     ... lots of output as topology runs...
 
-See a `live demo on YouTube`_.
+GIF Demo
+========
 
-.. _live demo on YouTube: https://youtu.be/od8U-XijzlQ?t=14m19s
+.. image:: _static/quickstart.gif
+    :align: center
+    :width: 80%
 
 Submitting to remote cluster
 ============================
@@ -516,7 +524,7 @@ Submitting to remote cluster
 
 Does all the following **magic**:
 
-    - Makes virtualenvs across cluster
+    - Makes virtualenvs across cluster (optional)
     - Builds a JAR out of your source code
     - Opens reverse tunnel to Nimbus
     - Constructs an in-memory Topology spec
@@ -529,75 +537,10 @@ streamparse supplants storm.py
     :align: center
     :width: 80%
 
-======================
-Let's Make a Topology!
-======================
+==========================
+Making our topology faster
+==========================
 
-Word Stream Spout (Storm DSL)
-=============================
-
-.. sourcecode:: clojure
-
-    {"word-spout" (python-spout-spec options
-          "spouts.words.WordSpout" ; class (spout)
-          ["word"]                 ; stream (fields)
-        )
-    }
-
-Word Stream Spout in Python
-===========================
-
-.. sourcecode:: python
-
-    import itertools
-
-    from streamparse.spout import Spout
-
-    class Words(Spout):
-
-        def initialize(self, conf, ctx):
-            self.words = itertools.cycle(['dog', 'cat',
-                                          'zebra', 'elephant'])
-
-        def next_tuple(self):
-            word = next(self.words)
-            self.emit([word])
-
-Emits one-word tuples from endless generator.
-
-Word Count Bolt (Storm DSL)
-===========================
-
-.. sourcecode:: clojure
-
-    {"word-count-bolt" (python-bolt-spec options
-            {"word-spout" ["word"]}     ; input (grouping)
-            "bolts.wordcount.WordCount" ; class (bolt)
-            ["word" "count"]            ; stream (fields)
-            :p 2                        ; parallelism
-        )
-    }
-
-Word Count Bolt in Python
-=========================
-
-.. sourcecode:: python
-
-    from collections import Counter
-
-    from streamparse.bolt import Bolt
-
-    class WordCount(Bolt):
-
-        def initialize(self, conf, ctx):
-            self.counts = Counter()
-
-        def process(self, tup):
-            word = tup.values[0]
-            self.counts[word] += 1
-            self.log('%s: %d' % (word, self.counts[word]))
-
-Keeps word counts in-memory (assumes grouping).
 
 BatchingBolt for Performance
 ============================
@@ -607,19 +550,19 @@ BatchingBolt for Performance
     from streamparse.bolt import BatchingBolt
 
     class WordCount(BatchingBolt):
-
-        secs_between_batches = 5
+        config = {'topology.tick.tuple.freq.secs': 1}
+        ticks_between_batches = 5
 
         def group_key(self, tup):
             # collect batches of words
-            word = tup.values[0]
+            word = tup.values.word
             return word
 
         def process_batch(self, key, tups):
             # emit the count of words we had per 5s batch
             self.emit([key, len(tups)])
 
-Implements **5-second micro-batches**.
+Implements **5-second micro-batches** via tick tuples.
 
 Bolts for Real-Time ETL
 =======================
@@ -661,209 +604,77 @@ sparse options
 
 .. sourcecode:: text
 
-    $ sparse help
+    $ sparse --help
+    usage: sparse [-h] [--version]
+                  {jar,kill,list,quickstart,remove_logs,run,stats,submit,
+                   tail,update_virtualenv,visualize,worker_uptime}
+                  ...
 
-    Usage:
-            sparse quickstart <project_name>
-            sparse run [-o <option>]... [-p <par>] [-t <time>] [-dv]
-            sparse submit [-o <option>]... [-p <par>] [-e <env>] [-dvf]
-            sparse list [-e <env>] [-v]
-            sparse kill [-e <env>] [-v]
-            sparse tail [-e <env>] [--pattern <regex>]
-            sparse (-h | --help)
-            sparse --version
+    Utilities for managing Storm/streamparse topologies.
 
-===============
-pykafka preview
-===============
+    sub-commands:
+        jar                 Create a deployable JAR for a topology.
+        kill                Kill the specified Storm topology
+        list                List the currently running Storm topologies
+        quickstart          Create new streamparse project template.
+        remove_logs         Remove logs from Storm workers.
+        run                 Run the local topology with the given args
+        stats               Display stats about running Storm topologies.
+        submit              Submit a Storm topology to Nimbus.
+        tail                Tail logs for specified Storm topology.
+        update_virtualenv   Create/update a virtualenv on Storm workers.
+        worker_uptime       Display uptime for Storm workers.
 
-Apache Kafka
-============
 
-"Messaging rethought as a commit log."
+===========
+Coming soon
+===========
 
-Distributed ``tail -f``.
+Simpler Deployment
+==================
 
-Perfect fit for Storm Spouts.
+Currently we create virtualenvs via SSH/fabric.
 
-Able to keep up with Storm's high-throughput processing.
+This doesn't work with Docker.
 
-Great for handling backpressure during traffic spikes.
+Will setup virtualenvs when topology starts running on cluster.
 
-pykafka
-=======
+Will be accomplished via topology hook.
 
-We have released ``pykafka``.
+Python Topology DSL
+===================
 
-NOT to be confused with ``kafka-python``.
+Was shown in talk as if finished, but not available in a release.
 
-Upgraded internal Kafka 0.7 driver to 0.8.2:
+Follow the `pull request`_ for updates.
 
-- SimpleConsumer **and** BalancedConsumer
-- Consumer Groups with Zookeeper
-- Pure Python protocol implementation
-- C protocol implementation in works (via librdkafka)
+.. _pull request: https://github.com/Parsely/streamparse/pull/199
 
-https://github.com/Parsely/pykafka
+Remove all traces of Clojure
+============================
+
+Previously used Leiningen for packaging and Clojure for DSL.
+
+Will switch to communicating with Nimbus directly via Thrift.
+
+`thriftpy`_ makes this very simple.
+
+.. _thriftpy: https://github.com/eleme/thriftpy
+
 
 Questions?
 ==========
 
-I'm sprinting on a Python Storm Topology DSL.
-
-Hacking on Monday and Tuesday. Join me!
-
 streamparse: http://github.com/Parsely/streamparse
+
+pystorm: http://github.com/pystorm/pystorm
 
 Parse.ly's hiring: http://parse.ly/jobs
 
-Find me on Twitter: http://twitter.com/amontalenti
+Find me on Twitter: http://twitter.com/dsblanch
 
 That's it!
 
-========
-Appendix
-========
-
-Storm and Spark Together
-========================
-
-.. image:: ./_static/streamparse_reference.png
-    :width: 90%
-    :align: center
-
-Overall Architecture
-====================
-
-.. image:: ./_static/big_diagram.png
-    :width: 80%
-    :align: center
-
-Multi-Lang Impl's in Python
-===========================
-
-- `storm.py`_ (Storm, 2010)
-- `Petrel`_ (AirSage, Dec 2012)
-- `streamparse`_ (Parse.ly, Apr 2014)
-- `pyleus`_ (Yelp, Oct 2014)
-
-Plans to unify IPC implementations around **pystorm**.
-
-.. _storm.py: https://github.com/apache/storm/blob/master/storm-core/src/multilang/py/storm.py
-.. _Petrel: https://github.com/AirSage/Petrel
-.. _pyleus: https://github.com/Yelp/pyleus
-.. _streamparse: http://github.com/Parsely/streamparse
-
-Other Related Projects
-======================
-
-- `lein`_ - Clojure dependency manager used by streamparse
-- `flux`_ - YAML Topology runner
-- `Clojure DSL`_ - Topology DSL, bundled with Storm
-- `Trident`_ - Java "high-level" DSL, bundled with Storm
-
-streamparse uses lein and a simplified Clojure DSL.
-
-Will add a Python DSL in 2.x.
-
-.. _lein: http://leiningen.org/
-.. _flux: https://github.com/ptgoetz/flux
-.. _Clojure DSL: http://storm.apache.org/documentation/Clojure-DSL.html
-.. _Trident: https://storm.apache.org/documentation/Trident-tutorial.html
-.. _marceline: https://github.com/yieldbot/marceline
-.. _@Parsely: http://twitter.com/Parsely
-.. _@amontalenti: http://twitter.com/amontalenti
-
-Topology Wiring
-===============
-
-.. sourcecode:: python
-
-    def wire(spout, bolts=[]):
-        """Wire the components together in a pipeline.
-        Return the spout coroutine that kicks it off."""
-        last, target = None, None
-        for bolt in reversed(bolts):
-            step = bolt_coroutine(bolt)
-            if last is None:
-                last = step
-                continue
-            else:
-                step = bolt_coroutine(bolt, target=last)
-                last = step
-        return spout_coroutine(spout, target=last)
-
-Streams, Grouping, Parallelism
-==============================
-
-(still pseudocode)
-
-.. sourcecode:: python
-
-    class WordCount(Topology):
-        spouts = [
-            WordSpout(
-                name="word-spout",
-                out=["word"],
-                p=2)
-        ]
-        bolts = [
-            WordCountBolt(
-                name="word-count-bolt",
-                from=WordSpout,
-                group_on="word",
-                out=["word", "count"],
-                p=8)
-        ]
-
-Storm is "Javanonic"
-====================
-
-Ironic term one of my engineers came up with for a project that feels very
-Java-like, and not very "Pythonic".
-
-Storm Java Quirks
-=================
-
-- Topology Java builder API (eek).
-- Projects built with Maven tasks (yuck).
-- Deployment needs a JAR of your code (ugh).
-- No simple local dev workflow built-in (boo).
-- Storm uses Thrift interfaces (shrug).
-
-Multi-Lang Protocol
-===================
-
-The multi-lang protocol has the full core:
-
-- ack
-- fail
-- emit
-- anchor
-- log
-- heartbeat
-- tuple tree
-
-Kafka and Multi-consumer
-========================
-
-.. image:: ./_static/multiconsumer.png
-    :width: 60%
-    :align: center
-
-Kafka Consumer Groups
-=====================
-
-.. image:: ./_static/consumer_groups.png
-    :width: 60%
-    :align: center
-
-streamparse projects
-====================
-
-.. image:: ./_static/streamparse_project.png
-    :width: 90%
-    :align: center
 
 .. raw:: html
 
