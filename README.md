@@ -4,8 +4,8 @@ PyData NYC 2015 talk on streamparse and pystorm.
 
 ## View the slides now
 
-http://parse.ly/slides/streamparse
-http://parse.ly/slides/streamparse/notes
+http://parse.ly/slides/pystorm2015
+http://parse.ly/slides/pystorm2015/notes
 
 ## How these slides are built
 
